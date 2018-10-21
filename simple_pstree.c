@@ -25,28 +25,43 @@ void string_ini(int8_t data[])
 }
 int main(int argc, char **argv)
 {
-    char MODE = argv[1][1]; //select the mode
+
+    char MODE='c';
+    if(argc>1)
+        MODE = argv[1][1]; //select the mode
 
 
     int i;
     char pid_number[20]= {'\0'};
-    for(i=0; argv[1][i+2]!='\0'; i++)
-        pid_number[i]=argv[1][i+2];
+    if(argc>1) {
+        if(argv[1][0]<58 && argv[1][0]>48) {
+            for(i=0; argv[1][i]!='\0'; i++)
+                pid_number[i]=argv[1][i];
+
+        } else if(strlen(argv[1])==2) {
+            pid_number[0]='1';
+        } else {
+            for(i=0; argv[1][i+2]!='\0'; i++)
+                pid_number[i]=argv[1][i+2];
+
+        }
+    } else
+        pid_number[0]='1';
 
     int pid_integer=1;
-    pid_integer = atoi(pid_number);//convert string to int
 
+    pid_integer = atoi(pid_number);//convert string to int
 
     char data[20]= {'\0'};
     if(MODE == 's' || MODE == 'p')
         data[0]=MODE;
     else
         data[0]='c';
-    //char *data ="hello kernel";
+
     data[1]=' ';
     for(i=0; pid_number[i]!='\0'; i++)
         data[i+2]=pid_number[i];
-    //printf("%s\n",data);
+
 
     struct sockaddr_nl local, dest_addr;
     int skfd;
@@ -83,11 +98,11 @@ int main(int argc, char **argv)
 
     ret = sendto(skfd, nlh, nlh->nlmsg_len, 0, (struct sockaddr *)&dest_addr, sizeof(struct sockaddr_nl));
     if(!ret) {
-        perror("sendto error1\n");
+        perror("send error\n");
         close(skfd);
         exit(-1);
     }
-    printf("wait kernel msg!\n");
+
 
     memset(&info, 0, sizeof(info));
     while(ret = recvfrom(skfd, &info, sizeof(struct _my_msg), 0, (struct sockaddr *)&dest_addr, sizeof(dest_addr))) {
@@ -97,6 +112,8 @@ int main(int argc, char **argv)
             exit(-1);
         }
 
+        if(strcmp(info.data,"end of message!!")==0)
+            break;
         printf("%s\n", info.data);
         string_ini(info.data);
 

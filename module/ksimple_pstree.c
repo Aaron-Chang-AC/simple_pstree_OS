@@ -17,11 +17,13 @@
 
 MODULE_LICENSE("GPL");
 
-typedef struct Parent_process {
-    char process_name[50];
-    int pid;
-
-} P;
+static void produce_space(char S[],int num)
+{
+    int i;
+    for(i=0; i<num; i++)
+        S[i]=' ';
+    return;
+}
 static struct sock *netlinkfd = NULL;
 static int send_msg_to_user(int8_t *pbuf, uint16_t len)
 {
@@ -36,7 +38,7 @@ static int send_msg_to_user(int8_t *pbuf, uint16_t len)
     }
     nlh = nlmsg_put(nl_skb, 0, 0, USER_MSG, len, 0);
     if(nlh == NULL) {
-        printk("nlmsg_put() error\n");
+        printk("nlmsg_put error\n");
         nlmsg_free(nl_skb);
         return -1;
     }
@@ -60,25 +62,25 @@ static void recv_cb(struct sk_buff *skb)
     void *data = NULL;
     char *recv_data;
     char MODE;
-    char pid_string[50]= {'\0'};
+    char pid_string[20]= {'\0'};
     int i;
     int j;
-    int k;
     int pid;
     int converted;
 
-    char D[50]= {'\0'};
-    char TEST[200]= {'\0'};
+    int  D=-1;
+    char B[100]= {'\0'};
+    char TEST[150]= {'\0'};
     char TEST_child[100]= {'\0'};
 
     struct task_struct *temp=NULL;
     struct task_struct *temp_child=NULL;
-    struct task_struct* task_to_find=NULL;
+    struct task_struct *task_to_find=NULL;
+    struct task_struct *temp_list[50]= {NULL};
     struct list_head *head=NULL;
     struct list_head *child_head=NULL;
-    //P parent_process[50];
-    int u=0;
-    printk("skb->len:%u\n", skb->len);
+
+    printk("skb_len:%u\n", skb->len);
     if(skb->len >= nlmsg_total_size(0)) {
         nlh= nlmsg_hdr(skb);
         data = NLMSG_DATA(nlh);
@@ -89,12 +91,9 @@ static void recv_cb(struct sk_buff *skb)
             for(i=0; recv_data[i+2]!='\0'; i++)
                 pid_string[i]=recv_data[i+2];
 
-
-
             converted=sscanf(pid_string,"%d",&pid); //turn string to int
 
-
-            //**********************************************
+            //***********MODE SELECTION**************************
 
             task_to_find = pid_task(find_get_pid(pid),PIDTYPE_PID);
 
@@ -108,6 +107,7 @@ static void recv_cb(struct sk_buff *skb)
                     temp=list_entry(head,struct task_struct,sibling);
 
                     sprintf(TEST,"    %s(%d)",temp->comm,temp->pid);
+                    send_msg_to_user(TEST, strlen(TEST));
 
                     list_for_each(child_head,&temp->children) { //child of temp
                         temp_child=list_entry(child_head,struct task_struct,sibling);
@@ -116,75 +116,70 @@ static void recv_cb(struct sk_buff *skb)
                         send_msg_to_user(TEST_child,strlen(TEST_child));
                         str_ini(TEST_child,strlen(TEST_child));
                     }
-                    send_msg_to_user(TEST, strlen(TEST));
+
                     str_ini(TEST,strlen(TEST));
                 }
+
 
 
 
             } else if(MODE == 's') {
-                sprintf(TEST,"%s(%d)",task_to_find->comm,task_to_find->pid); //set data
-                send_msg_to_user(TEST, strlen(TEST)); //send data & length
                 str_ini(TEST,strlen(TEST)); //initialize TEST
-                list_for_each(head,&task_to_find->sibling) {
+                list_for_each(head,&task_to_find->parent->children) {
                     temp=list_entry(head,struct task_struct,sibling);
 
-
-                    if(strcmp(current->comm, "simple-pstree")==0 && u==0) {
-                        sprintf(TEST,"%s(%d)",current->comm,current->pid);
+                    if(temp->pid != task_to_find->pid) {
+                        sprintf(TEST,"%s(%d)",temp->comm,temp->pid);
                         send_msg_to_user(TEST, strlen(TEST));
-                        str_ini(TEST,strlen(TEST));
-                        u++;
-                    } else if(strcmp(current->comm, "simple-pstree")==0) {
-                        str_ini(TEST,strlen(TEST));
-
-                    } else {
-                        sprintf(TEST,"%s(%d)",current->comm,current->pid);
-                        send_msg_to_user(TEST, strlen(TEST));
-                        str_ini(TEST,strlen(TEST));
-
                     }
 
+                    str_ini(TEST,strlen(TEST));
                 }
 
             } else if(MODE == 'p') {
-                sprintf(TEST,"%s(%d)",task_to_find->comm,task_to_find->pid); //set data
-                send_msg_to_user(TEST, strlen(TEST)); //send data & length
-                str_ini(TEST,strlen(TEST)); //initialize TEST
                 temp = vmalloc(sizeof(struct task_struct*));
                 temp = task_to_find->parent;
+                temp_list[0]=task_to_find;
+                i=1;
                 while(temp->pid!=0) {
-                    sprintf(TEST,"%s(%d)",temp->comm,temp->pid);
+                    temp_list[i]=temp;
+                    temp=temp->parent;
+                    i++;
+                }
+                for(j=0; j<i; j++) {
+                    D=4*j;
+                    produce_space(B,D);
+                    sprintf(TEST,"%s%s(%d)",B,(temp_list[i-j-1])->comm,(temp_list[i-j-1])->pid);
                     send_msg_to_user(TEST, strlen(TEST));
                     str_ini(TEST,strlen(TEST));
-                    temp=temp->parent;
+
                 }
-
-
             }
 
 
         } else {
             printk("Fail to recieve data!!\n");
+
         }
     }
+    send_msg_to_user("end of message!!", strlen("end of message!!"));
 }
 struct netlink_kernel_cfg cfg = { .input = recv_cb, };
 static int __init test_netlink_init(void)
 {
-    printk("init netlink_demo!\n");
+    printk("netlink_init\n");
     netlinkfd = netlink_kernel_create(&init_net, USER_MSG, &cfg);
     if(!netlinkfd) {
-        printk(KERN_ERR "can not create a netlink socket!\n");
+        printk(KERN_ERR "netlink_socket creation error\n");
         return -1;
     }
-    printk("netlink demo init ok!\n");
+    printk("init finished\n");
     return 0;
 }
 static void __exit test_netlink_exit(void)
 {
     sock_release(netlinkfd->sk_socket);
-    printk(KERN_DEBUG "netlink exit\n!");
+    printk(KERN_DEBUG "exit\n!");
 }
 module_init(test_netlink_init);
 module_exit(test_netlink_exit);
