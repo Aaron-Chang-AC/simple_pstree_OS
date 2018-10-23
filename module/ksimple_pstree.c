@@ -16,7 +16,6 @@
 #define USER_PORT   50
 
 MODULE_LICENSE("GPL");
-
 static void produce_space(char S[],int num)
 {
     int i;
@@ -56,6 +55,30 @@ static void str_ini(char TEST[],int len)
     return;
 
 }
+static void find_child(struct list_head *head,struct task_struct *task_to_find,int e)
+{
+    struct task_struct *temp=NULL;
+    struct list_head *list_child=NULL;
+    list_for_each(head,&task_to_find->children) {
+
+        temp=list_entry(head,struct task_struct,sibling);
+
+        char S[100]= {'\0'};
+        char TEST[150]= {'\0'};
+        produce_space(S,e);
+        sprintf(TEST,"%s%s(%d)",S,temp->comm,temp->pid);
+        send_msg_to_user(TEST, strlen(TEST));
+
+        find_child(list_child,temp,e+4);
+        str_ini(TEST,strlen(TEST));
+        str_ini(S,e);
+    }
+    return;
+
+
+
+}
+
 static void recv_cb(struct sk_buff *skb)
 {
     struct nlmsghdr *nlh = NULL;
@@ -101,26 +124,10 @@ static void recv_cb(struct sk_buff *skb)
 
             if(MODE == 'c') {
                 sprintf(TEST,"%s(%d)",task_to_find->comm,task_to_find->pid); //set data
+
                 send_msg_to_user(TEST, strlen(TEST)); //send data & length
+                find_child(head,task_to_find,4);
                 str_ini(TEST,strlen(TEST)); //initialize TEST
-                list_for_each(head,&task_to_find->children) {
-                    temp=list_entry(head,struct task_struct,sibling);
-
-                    sprintf(TEST,"    %s(%d)",temp->comm,temp->pid);
-                    send_msg_to_user(TEST, strlen(TEST));
-
-                    list_for_each(child_head,&temp->children) { //child of temp
-                        temp_child=list_entry(child_head,struct task_struct,sibling);
-
-                        sprintf(TEST_child,"        %s(%d)",temp_child->comm,temp_child->pid);
-                        send_msg_to_user(TEST_child,strlen(TEST_child));
-                        str_ini(TEST_child,strlen(TEST_child));
-                    }
-
-                    str_ini(TEST,strlen(TEST));
-                }
-
-
 
 
             } else if(MODE == 's') {
